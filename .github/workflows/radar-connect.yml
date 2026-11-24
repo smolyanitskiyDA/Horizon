@@ -1,0 +1,29 @@
+name: Radar - Telegram connection
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  connect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Telegram connection
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python - <<'PY'
+          import os, json, urllib.request
+          token = os.environ.get("TELEGRAM_BOT_TOKEN")
+          chat = os.environ.get("TELEGRAM_CHAT_ID")
+          if not token or not chat:
+              raise SystemExit("Configure both Telegram secrets")
+          req = urllib.request.Request("https://api.telegram.org/bot" + token + "/sendMessage", data=json.dumps({"chat_id": chat, "text": "✅ Новостной радар: подключение успешно!"}).encode(), headers={"Content-Type":"application/json"})
+          try:
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  if not json.load(response).get("ok"):
+                      raise ValueError()
+          except Exception:
+              raise SystemExit("Telegram delivery failed. Check secrets and start the bot.")
+          print("Telegram delivery successful")
+          PY
