@@ -13,17 +13,40 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python - <<'PY'
-          import os, json, urllib.request
-          token = os.environ.get("TELEGRAM_BOT_TOKEN")
-          chat = os.environ.get("TELEGRAM_CHAT_ID")
-          if not token or not chat:
-              raise SystemExit("Configure both Telegram secrets")
-          req = urllib.request.Request("https://api.telegram.org/bot" + token + "/sendMessage", data=json.dumps({"chat_id": chat, "text": "✅ Новостной радар: подключение успешно!"}).encode(), headers={"Content-Type":"application/json"})
-          try:
-              with urllib.request.urlopen(req, timeout=20) as response:
-                  if not json.load(response).get("ok"):
-                      raise ValueError()
-          except Exception:
-              raise SystemExit("Telegram delivery failed. Check secrets and start the bot.")
-          print("Telegram delivery successful")
+          import os, json, urllib.request, urllib.error, re
+          token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+          chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+          if not re.fullmatch(r"\d+:[A-Za-z0-9_-]+", token):
+              raise SystemExit("TELEGRAM_BOT_TOKEN missing or invalid format")
+          if not re.fullmatch(r"-?\d+", chat):
+              raise SystemExit("TELEGRAM_CHAT_ID must be numeric")
+          def call(method, payload):
+              req = urllib.request.Request("https://api.telegram.org/bot" + token + "/" + method, data=json.dumps(payload).encode(), headers={"Content-Type":"application/json"})
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as response:
+                      result = json.load(response)
+              except urllib.error.HTTPError as e:
+                  try:
+                      result = json.loads(e.read())
+                  except Exception:
+                      result = {}
+                  desc = str(result.get("description", "")).lower()
+                  if "chat not found" in desc:
+                      hint = "Chat not found: check Chat ID and send /start to your bot"
+                  elif "blocked" in desc:
+                      hint = "Bot blocked by recipient"
+                  elif e.code in (401, 404):
+                      hint = "Check bot token"
+                  elif e.code == 403:
+                      hint = "Bot cannot initiate conversation: send /start"
+                  else:
+                      hint = "Telegram rejected the request"
+                  raise SystemExit(f"{method}: HTTP {e.code}; {hint}") from None
+              except Exception as e:
+                  raise SystemExit(f"{method}: network or response error ({type(e).__name__})") from None
+              if not result.get("ok"):
+                  raise SystemExit(f"{method}: Telegram returned failure")
+              print(f"{method}: OK")
+          call("getMe", {})
+          call("sendMessage", {"chat_id": chat, "text": "✅ Новостной радар: подключение успешно!"})
           PY
