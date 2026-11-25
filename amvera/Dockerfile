@@ -6,8 +6,7 @@ COPY src ./src
 COPY profiles ./profiles
 COPY data/config.example.json ./data/config.example.json
 RUN uv sync --frozen --no-dev
-COPY amvera/worker.py ./worker.py
-ENV PYTHONUNBUFFERED=1 HORIZON_CHATGPT_AUTH_DIR=/data/chatgpt
-RUN useradd --create-home --uid 10001 horizon && chown -R horizon:horizon /app
-# Initialize permissions on the mounted volume before dropping privileges.
-ENTRYPOINT ["/app/.venv/bin/python", "/app/worker.py"]
+COPY amvera/worker.py amvera/digest.py amvera/feeds.json ./amvera/
+ENV PYTHONUNBUFFERED=1 HORIZON_CHATGPT_AUTH_DIR=/data/chatgpt HOME=/home/horizon
+RUN useradd --create-home --uid 10001 horizon
+ENTRYPOINT ["/app/.venv/bin/python", "-m", "amvera.worker"]

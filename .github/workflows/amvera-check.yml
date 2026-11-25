@@ -1,0 +1,32 @@
+name: Amvera container check
+on:
+  push:
+    branches: [main]
+    paths: ['amvera/**', 'amvera.yml', 'src/**', 'pyproject.toml', 'uv.lock', '.github/workflows/amvera-check.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the Amvera image
+        run: docker build --file amvera/Dockerfile --tag horizon-check .
+      - name: Check startup and persistence without production credentials
+        run: |
+          set -eu
+          docker volume create horizon-check-data
+          start_worker() {
+            docker run -d --name horizon-check --mount source=horizon-check-data,target=/data -p 127.0.0.1:8080:8080 horizon-check
+            curl --fail --silent --show-error --retry 20 --retry-all-errors --retry-delay 1 http://127.0.0.1:8080/health |
+              python -c 'import json,sys; d=json.load(sys.stdin); assert d["service"]=="horizon" and d["schedule"]=="08:00 Europe/Moscow"'
+          }
+          start_worker
+          probe='from pathlib import Path; import json,os; p=Path("/data/chatgpt"); assert os.getuid()==10001 and p.stat().st_mode & 0o777 == 0o700; h=p/"host.json"; assert h.stat().st_mode & 0o777 == 0o600; print(json.loads(h.read_text())["ext_agent_host_id"])'
+          first=$(docker exec --user 10001 horizon-check /app/.venv/bin/python -c "$probe")
+          docker rm -f horizon-check
+          start_worker
+          second=$(docker exec --user 10001 horizon-check /app/.venv/bin/python -c "$probe")
+          test "$first" = "$second"
