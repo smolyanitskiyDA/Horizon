@@ -30,3 +30,10 @@ jobs:
           start_worker
           second=$(docker exec --user 10001 horizon-check /app/.venv/bin/python -c "$probe")
           test "$first" = "$second"
+  phone-login:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check iSH login dependencies on 32-bit Alpine
+        run: docker run --rm --platform linux/386 -v "$PWD:/repo:ro" alpine:3.14 sh /repo/amvera/login_ish.sh --check
