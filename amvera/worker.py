@@ -25,6 +25,7 @@ from .digest import configuration, prepare, select_model
 ZONE = ZoneInfo("Europe/Moscow")
 PREPARE_AT = dt.time(7, 30)
 SEND_AT = dt.time(8)
+PLAN_RETRY_SECONDS = 8 * 60 * 60
 AUTH = Path("/data/chatgpt")
 STATE = Path("/data/radar")
 status = "starting"
@@ -115,6 +116,7 @@ def open_db(state):
     db.execute("""CREATE TABLE IF NOT EXISTS editions (
         day TEXT PRIMARY KEY, body TEXT NOT NULL, stage TEXT NOT NULL,
         retry_at REAL NOT NULL DEFAULT 0, message_id INTEGER)""")
+    db.execute("CREATE TABLE IF NOT EXISTS plan_backoff (id INTEGER PRIMARY KEY CHECK(id=1), retry_at REAL NOT NULL)")
     return db
 
 
@@ -131,10 +133,23 @@ def tick(now, db, state, settings, ready, *, build=prepare, call=bot_call):
     if row is None:
         if not ready:
             return "waiting_for_chatgpt"
+        backoff = db.execute("SELECT retry_at FROM plan_backoff WHERE id=1").fetchone()
+        if backoff and now.timestamp() < backoff[0]:
+            return "waiting_for_plan_limit"
         async def generate():
             async with asyncio.timeout(1200):
                 return await build(cutoff, state, os.getenv("HORIZON_CHATGPT_MODEL", "").strip())
-        body = asyncio.run(generate())
+        try:
+            body = asyncio.run(generate())
+        except AIProviderUnavailableError as exc:
+            if "subscription_sharing_usage_limit_exceeded" not in str(exc):
+                raise
+            retry_at = time.time() + PLAN_RETRY_SECONDS
+            db.execute("INSERT OR REPLACE INTO plan_backoff(id, retry_at) VALUES (1, ?)", (retry_at,))
+            log_failure(exc)
+            print("Horizon plan retry at:", dt.datetime.fromtimestamp(retry_at, ZONE).isoformat(), flush=True)
+            return "waiting_for_plan_limit"
+        db.execute("DELETE FROM plan_backoff WHERE id=1")
         db.execute("INSERT INTO editions(day, body, stage) VALUES (?, ?, 'prepared')", (day, body))
         row = (body, "prepared", 0)
     if now.time() < SEND_AT or now.timestamp() < row[2]:
