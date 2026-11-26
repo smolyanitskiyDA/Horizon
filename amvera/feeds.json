@@ -1,22 +1,56 @@
 {
-  "rss": [
-    {"name": "OpenAI", "url": "https://openai.com/news/rss.xml", "category": "ИИ"},
-    {"name": "Simon Willison", "url": "https://simonwillison.net/atom/entries/", "category": "ИИ"},
-    {"name": "Finextra", "url": "https://www.finextra.com/rss/headlines.aspx", "category": "Финтех"},
-    {"name": "Frank Media", "url": "https://frankmedia.ru/feed", "category": "Банковские технологии РФ"},
-    {"name": "Банк России", "url": "https://www.cbr.ru/rss/eventrss", "category": "Банковские технологии РФ"},
-    {"name": "Apple Newsroom", "url": "https://www.apple.com/newsroom/rss-feed.rss", "category": "Apple"},
-    {"name": "Apple Developer", "url": "https://developer.apple.com/news/rss/news.rss", "category": "Apple"},
-    {"name": "GitHub Changelog", "url": "https://github.blog/changelog/feed/", "category": "GitHub"},
-    {"name": "Go Blog", "url": "https://go.dev/blog/feed.atom", "category": "Разработка"},
-    {"name": "Python Insider", "url": "https://blog.python.org/feeds/posts/default", "category": "Разработка"},
-    {"name": "Банк России · пресс-релизы", "url": "https://www.cbr.ru/rss/RssPress", "category": "Экономика"},
-    {"name": "Ведомости · экономика", "url": "https://www.vedomosti.ru/rss/rubric/economics", "category": "Экономика"}
-  ],
-  "telegram": {"channels": [
-    {"channel": "telegram", "category": "Telegram"},
-    {"channel": "BotNews", "category": "Telegram"}
-  ]},
-  "hackernews": {"enabled": false},
-  "reddit": {"enabled": false}
+  "rss": [],
+  "telegram": {
+    "enabled": true,
+    "channels": [
+      {
+        "channel": "bugnotfeature",
+        "category": "Напомни мне",
+        "enabled": true,
+        "fetch_limit": 40,
+        "profile": "tech-news"
+      },
+      {
+        "channel": "techmedia",
+        "category": "Напомни мне",
+        "enabled": true,
+        "fetch_limit": 40,
+        "profile": "tech-news"
+      },
+      {
+        "channel": "malepeg",
+        "category": "Напомни мне",
+        "enabled": true,
+        "fetch_limit": 40,
+        "profile": "tech-news"
+      },
+      {
+        "channel": "whackdoor",
+        "category": "Напомни мне",
+        "enabled": true,
+        "fetch_limit": 40,
+        "profile": "tech-news"
+      },
+      {
+        "channel": "trendwatching",
+        "category": "Напомни мне",
+        "enabled": true,
+        "fetch_limit": 40,
+        "profile": "tech-news"
+      },
+      {
+        "channel": "exploitex",
+        "category": "Напомни мне",
+        "enabled": true,
+        "fetch_limit": 40,
+        "profile": "tech-news"
+      }
+    ]
+  },
+  "hackernews": {
+    "enabled": false
+  },
+  "reddit": {
+    "enabled": false
+  }
 }
