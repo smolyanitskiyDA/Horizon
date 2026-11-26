@@ -19,6 +19,7 @@ from filelock import FileLock, Timeout
 
 from src.ai.chatgpt import ChatGPTClient
 from src.ai.chatgpt_auth import ChatGPTAuth
+from src.ai.errors import AIProviderUnavailableError
 from .digest import configuration, prepare, select_model
 
 ZONE = ZoneInfo("Europe/Moscow")
@@ -176,12 +177,69 @@ async def check_live(settings):
     print("ChatGPT plan inference and Telegram bot/chat verified.", flush=True)
 
 
+def log_failure(exc):
+    # Never print arbitrary exception text, URLs, response bodies or account IDs.
+    print("Horizon:", type(exc).__name__, flush=True)
+    message = str(exc)
+    if isinstance(exc, (AIProviderUnavailableError, RuntimeError)):
+        # These are fixed messages emitted by the first-party Horizon auth adapter.
+        known = {
+            "ChatGPT session expired or was revoked. Run horizon-chatgpt login.": "session_expired_or_revoked",
+            "Invalid ChatGPT client registration; reconnect the saved account.": "invalid_client_registration",
+            "ChatGPT plan usage is not enabled. Run horizon-chatgpt login --enable-plan.": "plan_permission_missing",
+            "ChatGPT plan permission was removed. Run horizon-chatgpt login --enable-plan.": "plan_permission_removed",
+            "ChatGPT is not connected. Run horizon-chatgpt login.": "not_connected",
+            "ChatGPT is signed out. Run horizon-chatgpt login.": "signed_out",
+            "No ChatGPT account selected. Run horizon-chatgpt login.": "no_account",
+            "Could not reach the ChatGPT service; saved credentials were retained.": "auth_network_failure",
+            "ChatGPT connection failed; partial output was discarded.": "inference_network_failure",
+            "Invalid ChatGPT model catalog.": "invalid_model_catalog",
+            "ChatGPT refresh identity mismatch; credentials retained.": "refresh_identity_mismatch",
+        }
+        if message in known:
+            print("Horizon diagnostic:", known[message], flush=True)
+        elif message.startswith(("ChatGPT request failed", "ChatGPT plan usage limit reached.")):
+            # Allowlist known service codes only; never echo arbitrary API text.
+            code = next((c for c in (
+                "subscription_sharing_usage_limit_exceeded",
+                "subscription_sharing_user_not_eligible",
+                "subscription_sharing_unsupported_capability",
+                "subscription_sharing_route_not_supported",
+                "subscription_sharing_invalid_user",
+                "chatpass_v2_scope_not_authorized",
+                "chatpass_v2_invalid_authorization_context",
+                "model_not_found", "invalid_api_key", "invalid_request_error",
+                "rate_limit_exceeded", "insufficient_quota", "unsupported_country_region_territory",
+            ) if re.search(r"(?<![A-Za-z0-9_])" + c + r"(?![A-Za-z0-9_])", message)), "unknown_error")
+            http = re.search(r"\bHTTP ([1-5][0-9]{2})\b", message)
+            print("Horizon diagnostic: OpenAI code=" + code + " HTTP=" + (http.group(1) if http else "not_available"), flush=True)
+        elif message.startswith("ChatGPT token refresh failed (HTTP "):
+            http = re.search(r"\bHTTP ([1-5][0-9]{2})\b", message)
+            print("Horizon diagnostic: refresh_failed HTTP=" + (http.group(1) if http else "not_available"), flush=True)
+    elif isinstance(exc, ValueError) and message == "No matching model in the connected plan":
+        print("Horizon diagnostic: no_matching_model", flush=True)
+
+
+def log_auth_state():
+    try:
+        session = ChatGPTAuth().status()
+        expires = session.get("expires_at")
+        refresh_due = isinstance(expires, (int, float)) and expires <= time.time() + 60
+        print("Horizon auth: connected=" + str(bool(session.get("connected"))).lower()
+              + " plan_usage=" + str(bool(session.get("plan_usage"))).lower()
+              + " refresh_due=" + str(refresh_due).lower()
+              + " model_override=" + str(bool(os.getenv("HORIZON_CHATGPT_MODEL", "").strip())).lower(), flush=True)
+    except Exception as exc:
+        print("Horizon auth status unavailable:", type(exc).__name__, flush=True)
+
+
 def main():
     global status
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true", help="Verify the live ChatGPT plan and Telegram recipient")
     args = parser.parse_args()
     protected_storage()
+    log_auth_state()
     if args.check:
         asyncio.run(check_live(telegram_settings()))
         return
@@ -201,7 +259,8 @@ def main():
             new_status = "worker_busy"
         except Exception as exc:
             new_status = "generation_or_configuration_failed"
-            print("Horizon:", type(exc).__name__, flush=True)
+            log_failure(exc)
+            log_auth_state()
             pause = 600
         if new_status != status:
             status = new_status
